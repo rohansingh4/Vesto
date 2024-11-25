@@ -1,0 +1,19 @@
+[toolchain]
+anchor-version = "0.29.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.testnet]
+vesto2 = "f7cqvZHhS1dM99zSUuPStPFUgsHwEacGbG9fWCS8RJP"
+
+[registry]
+url = "https://anchor.projectserum.com"
+
+[provider]
+cluster = "https://rpc.testnet.soo.network/rpc"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
