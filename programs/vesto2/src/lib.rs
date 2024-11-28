@@ -1,16 +1,26 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, Transfer};
 
-declare_id!("f7cqvZHhS1dM99zSUuPStPFUgsHwEacGbG9fWCS8RJP");
+declare_id!("3WNE2z7h6o5u5wpurRAskpRYeHbRx8v4S1TcYZvdk2Lc");
 
 #[program]
 pub mod vesto {
     use super::*;
 
+    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
+        // Perform any necessary initialization here
+        // For example, you might want to set up some global state or configuration
+
+        Ok(())
+    }
+
     pub fn create_vesting_schedule(
         ctx: Context<CreateVestingSchedule>,
         amount: u64,
         bump: u8,
+        start_date: i64,
+        end_date: i64,
+        cliff_date: i64,
     ) -> Result<()> {
         let vesting_schedule = &mut ctx.accounts.vesting_schedule;
         vesting_schedule.owner = ctx.accounts.owner.key();
@@ -18,6 +28,9 @@ pub mod vesto {
         vesting_schedule.amount = amount;
         vesting_schedule.released = 0;
         vesting_schedule.bump = bump;
+        vesting_schedule.start_date = start_date;
+        vesting_schedule.end_date = end_date;
+        vesting_schedule.cliff_date = cliff_date;
 
         // Use CPI to transfer tokens to the escrow account
         let cpi_accounts = Transfer {
@@ -34,6 +47,31 @@ pub mod vesto {
 
     pub fn release_tokens(ctx: Context<ReleaseTokens>, amount: u64) -> Result<()> {
         let vesting_schedule = &mut ctx.accounts.vesting_schedule;
+        let current_time = Clock::get()?.unix_timestamp;
+
+        // Check if the current time is past the cliff date
+        if current_time >= vesting_schedule.cliff_date && vesting_schedule.released == 0 {
+            // Release half of the remaining tokens
+            let half_amount = vesting_schedule.amount / 2;
+            vesting_schedule.released += half_amount;
+
+            // Use CPI to transfer tokens from escrow to the beneficiary
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.escrow.clone(),
+                to: ctx.accounts.beneficiary_account.clone(),
+                authority: vesting_schedule.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let beneficiary_key = ctx.accounts.beneficiary.key();
+            let seeds = &[
+                b"vesting",
+                beneficiary_key.as_ref(),
+                &[vesting_schedule.bump],
+            ];
+            let signer_seeds = &[&seeds[..]];
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            token::transfer(cpi_ctx, half_amount)?;
+        }
 
         // Check release conditions
         if vesting_schedule.released + amount > vesting_schedule.amount {
@@ -145,7 +183,6 @@ pub struct ReleaseTokens<'info> {
     pub escrow: AccountInfo<'info>, // Use AccountInfo for TokenAccount
     /// CHECK: This field is safe because it is only used for token transfers and is verified by the program logic.
     #[account(mut)]
-    
     pub beneficiary_account: AccountInfo<'info>, // Use AccountInfo for TokenAccount
     pub token_program: Program<'info, Token>,
 }
@@ -174,16 +211,27 @@ pub struct VestingSchedule {
     pub amount: u64,
     pub released: u64,
     pub bump: u8,
+    pub start_date: i64, // Unix timestamp for start date
+    pub end_date: i64,   // Unix timestamp for end date
+    pub cliff_date: i64, // Unix timestamp for cliff date
 }
 
 impl VestingSchedule {
-    pub const LEN: usize = 8 + 32 + 32 + 8 + 8 + 1; // Discriminator + Owner + Beneficiary + Amount + Released + Bump
+    pub const LEN: usize = 8 + 32 + 32 + 8 + 8 + 1 + 8 + 8 + 8; // Total: 113 bytes
 }
-
 // Errors
 
 #[error_code]
 pub enum ErrorCode {
     #[msg("The release amount exceeds the remaining balance.")]
     ReleaseExceedsBalance,
+}
+
+// Define the context for the initialize function
+#[derive(Accounts)]
+pub struct Initialize<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    // Add any other accounts needed for initialization
+    pub system_program: Program<'info, System>,
 }

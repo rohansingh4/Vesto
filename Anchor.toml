@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.testnet]
-vesto2 = "f7cqvZHhS1dM99zSUuPStPFUgsHwEacGbG9fWCS8RJP"
+vesto2 = "3WNE2z7h6o5u5wpurRAskpRYeHbRx8v4S1TcYZvdk2Lc"
 
 [registry]
 url = "https://anchor.projectserum.com"
